@@ -31,9 +31,29 @@
 using namespace std;
 using namespace android;
 
+string callMethod(sp<IBinder> binder, int code, string encodedDate)
+{
+    string dataBytes = base64_decode(encodedDate);
+    unsigned int dataLength = dataBytes.length();
+
+    Parcel data, reply;
+
+    data.setDataSize(dataLength);
+    data.setDataPosition(0);
+
+    void *raw = data.writeInplace(dataLength);
+    memcpy(raw, dataBytes.c_str(), dataLength);
+
+    status_t st = binder->remoteBinder()->transact(code, data, &reply);
+
+    std::string output = base64_encode(reinterpret_cast<const unsigned char *>(reply.data()), reply.dataSize());
+
+    return output;
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 2)
+    if (argc < 2)
     {
         cout << "Please enter a service name." << endl;
         return 1;
@@ -54,29 +74,31 @@ int main(int argc, char **argv)
         return 3;
     }
 
+    if (argc == 4)
+    {
+        int code = atoi(argv[2]);
+        string encodedDate = argv[3];
+
+        string output = callMethod(binder, code, encodedDate);
+        cout << output << endl;
+
+        return 0;
+    }
+
     for (;;)
     {
         string input;
         getline(cin, input);
 
+        if (input == "exit")
+            break;
+
         unsigned long index = input.find(" ");
         int code = atoi(input.substr(0, index).c_str());
-        string dataEncoded = input.substr(index + 1, input.length());
+        string encodedDate = input.substr(index + 1, input.length());
 
-        string dataBytes = base64_decode(dataEncoded);
-        unsigned int dataLength = dataBytes.length();
-
-        Parcel data, reply;
-
-        data.setDataSize(dataLength);
-        data.setDataPosition(0);
-
-        void *raw = data.writeInplace(dataLength);
-        memcpy(raw, dataBytes.c_str(), dataLength);
-
-        status_t st = binder->remoteBinder()->transact(code, data, &reply);
-
-        std::string output = base64_encode(reinterpret_cast<const unsigned char *>(reply.data()), reply.dataSize());
+        string output = callMethod(binder, code, encodedDate);
         cout << output << endl;
     }
+    return 0;
 }

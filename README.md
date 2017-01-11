@@ -15,7 +15,11 @@ This project can run as root to call system service RPC from normal apps.
 11. The binary should be located in `${SourceDir}/out/target/product/*/system/bin/anycall`.
 
 ## Use
-Start shell and it will connect to service `$anycall ${service name}`  
+### Loop
+Start shell and it will connect to service `anycall ${service name}`  
 Input format `${transaction code} ${Base64.encodeToString(data.marshall())}`.  
+
+### Single line
+Input `anycall ${service name} ${transaction code} ${Base64.encodeToString(data.marshall())}`  
 Output format `${Base64.encodeToString(reply.marshall())}`.  
 The `data`, `reply` type is `android.os.Parcel`.
