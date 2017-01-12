@@ -1,6 +1,6 @@
 /*
  * Copyright 2016 xiaokangwang
- * Copyright 2016 Alex Zhang aka. ztc1997
+ * Copyright 2016-2017 Alex Zhang aka. ztc1997
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include <binder/IPCThreadState.h>
 
 #include "base64.h"
+#include "retval.h"
 
 using namespace std;
 using namespace android;
@@ -55,8 +56,8 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
     {
-        cout << "Please enter a service name." << endl;
-        return 1;
+        cout << "Missing parameters." << endl;
+        return ERROR_MISSING_PARAMETERS;
     }
 
     String16 token = String16(argv[1]);
@@ -64,14 +65,14 @@ int main(int argc, char **argv)
     if (sm == 0)
     {
         cout << "Failed to get ServiceManager." << endl;
-        return 2;
+        return ERROR_FAILED_TO_GET_SERVICE_MANAGER;
     }
 
     sp<IBinder> binder = sm->getService(String16(token));
     if (binder == 0)
     {
         cout << "Failed to get service, the service may not be running." << endl;
-        return 3;
+        return ERROR_FAILED_TO_GET_SERVICE;
     }
 
     if (argc == 4)
