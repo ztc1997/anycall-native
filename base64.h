@@ -1,4 +1,9 @@
-#include <string>
+struct decode_result
+{
+    char *ret;
+    int ret_len;
+};
 
-std::string base64_encode(unsigned char const* , unsigned int len);
-std::string base64_decode(std::string const& s);
+char *base64_encode(const unsigned char *data, int data_len);
+
+decode_result base64_decode(const char *data, int data_len);

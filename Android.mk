@@ -8,4 +8,3 @@ LOCAL_SRC_FILES := anycall.cpp base64.cpp
 LOCAL_SHARED_LIBRARIES := libutils libbinder
 LOCAL_C_INCLUDES += frameworks/native/include system/core/include
 include $(BUILD_EXECUTABLE)
-

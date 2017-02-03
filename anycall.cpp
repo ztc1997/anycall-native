@@ -19,7 +19,6 @@
 #define LOG_TAG "anycall"
 
 #include <stdlib.h>
-#include <iostream>
 
 #include <binder/IBinder.h>
 #include <binder/BpBinder.h>
@@ -29,25 +28,23 @@
 #include "base64.h"
 #include "retval.h"
 
-using namespace std;
 using namespace android;
 
-string callMethod(sp<IBinder> binder, int code, string encodedDate)
+char *callMethod(sp<IBinder> binder, int code, char *encodedDate)
 {
-    string dataBytes = base64_decode(encodedDate);
-    unsigned int dataLength = dataBytes.length();
+    decode_result result = base64_decode(encodedDate, strlen(encodedDate));
 
     Parcel data, reply;
 
-    data.setDataSize(dataLength);
+    data.setDataSize(result.ret_len);
     data.setDataPosition(0);
 
-    void *raw = data.writeInplace(dataLength);
-    memcpy(raw, dataBytes.c_str(), dataLength);
+    void *raw = data.writeInplace(result.ret_len);
+    memmove(raw, result.ret, result.ret_len); 
 
     status_t st = binder->remoteBinder()->transact(code, data, &reply);
 
-    std::string output = base64_encode(reinterpret_cast<const unsigned char *>(reply.data()), reply.dataSize());
+    char *output = base64_encode(reply.data(), reply.dataSize());
 
     return output;
 }
@@ -56,7 +53,7 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
     {
-        cout << "Missing parameters." << endl;
+        printf("Missing parameters.\n");
         return ERROR_MISSING_PARAMETERS;
     }
 
@@ -64,42 +61,42 @@ int main(int argc, char **argv)
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == 0)
     {
-        cout << "Failed to get ServiceManager." << endl;
+        printf("Failed to get ServiceManager.\n");
         return ERROR_FAILED_TO_GET_SERVICE_MANAGER;
     }
 
     sp<IBinder> binder = sm->getService(String16(token));
     if (binder == 0)
     {
-        cout << "Failed to get service, the service may not be running." << endl;
+        printf("Failed to get service, the service may not be running.\n");
         return ERROR_FAILED_TO_GET_SERVICE;
     }
 
     if (argc == 4)
     {
         int code = atoi(argv[2]);
-        string encodedDate = argv[3];
+        char *encodedDate = argv[3];
 
-        string output = callMethod(binder, code, encodedDate);
-        cout << output << endl;
+        char *output = callMethod(binder, code, encodedDate);
+        printf("%s\n", output);
 
         return 0;
     }
 
     for (;;)
     {
-        string input;
-        getline(cin, input);
+        char input[256];
+        fgets(input, sizeof(input), stdin);
 
-        if (input == "exit")
+        if (strcmp(strtok(input, "\n"), "exit") == 0)
             break;
 
-        unsigned long index = input.find(" ");
-        int code = atoi(input.substr(0, index).c_str());
-        string encodedDate = input.substr(index + 1, input.length());
+        int code = atoi(strtok(input, " "));
+        char *encodedDate = strtok(NULL, "\n");
 
-        string output = callMethod(binder, code, encodedDate);
-        cout << output << endl;
+        char *output = callMethod(binder, code, encodedDate);
+        printf("%s\n", output);
     }
+
     return 0;
 }

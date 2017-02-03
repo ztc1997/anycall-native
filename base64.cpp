@@ -1,123 +1,139 @@
-/*
-   base64.cpp and base64.h
-
-   Copyright (C) 2004-2008 René Nyffenegger
-
-   This source code is provided 'as-is', without any express or implied
-   warranty. In no event will the author be held liable for any damages
-   arising from the use of this software.
-
-   Permission is granted to anyone to use this software for any purpose,
-   including commercial applications, and to alter it and redistribute it
-   freely, subject to the following restrictions:
-
-   1. The origin of this source code must not be misrepresented; you must not
-      claim that you wrote the original source code. If you use this source code
-      in a product, an acknowledgment in the product documentation would be
-      appreciated but is not required.
-
-   2. Altered source versions must be plainly marked as such, and must not be
-      misrepresented as being the original source code.
-
-   3. This notice may not be removed or altered from any source distribution.
-
-   René Nyffenegger rene.nyffenegger@adp-gmbh.ch
-
-*/
-
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
 #include "base64.h"
-#include <iostream>
 
-static const std::string base64_chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                "abcdefghijklmnopqrstuvwxyz"
-                "0123456789+/";
+const char base[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
-
-static inline bool is_base64(unsigned char c) {
-    return (isalnum(c) || (c == '+') || (c == '/'));
-}
-
-std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len) {
-    std::string ret;
+char *base64_encode(const unsigned char *data, int data_len) {
+    //int data_len = strlen(data);
+    int prepare = 0;
+    int ret_len;
+    int temp = 0;
+    char *ret = NULL;
+    char *f = NULL;
+    int tmp = 0;
+    char changed[4];
     int i = 0;
-    int j = 0;
-    unsigned char char_array_3[3];
-    unsigned char char_array_4[4];
+    ret_len = data_len / 3;
+    temp = data_len % 3;
+    if (temp > 0) {
+        ret_len += 1;
+    }
+    ret_len = ret_len * 4 + 1;
+    ret = (char *) malloc(ret_len);
 
-    while (in_len--) {
-        char_array_3[i++] = *(bytes_to_encode++);
-        if (i == 3) {
-            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-            char_array_4[3] = char_array_3[2] & 0x3f;
-
-            for(i = 0; (i <4) ; i++)
-                ret += base64_chars[char_array_4[i]];
-            i = 0;
+    if (ret == NULL) {
+        printf("No enough memory.\n");
+        exit(0);
+    }
+    memset(ret, 0, ret_len);
+    f = ret;
+    while (tmp < data_len) {
+        temp = 0;
+        prepare = 0;
+        memset(changed, '\0', 4);
+        while (temp < 3) {
+            //printf("tmp = %d\n", tmp);
+            if (tmp >= data_len) {
+                break;
+            }
+            prepare = ((prepare << 8) | (data[tmp] & 0xFF));
+            tmp++;
+            temp++;
+        }
+        prepare = (prepare << ((3 - temp) * 8));
+        //printf("before for : temp = %d, prepare = %d\n", temp, prepare);
+        for (i = 0; i < 4; i++) {
+            if (temp < i) {
+                changed[i] = 0x40;
+            } else {
+                changed[i] = (prepare >> ((3 - i) * 6)) & 0x3F;
+            }
+            *f = base[changed[i]];
+            //printf("%.2X", changed[i]);
+            f++;
         }
     }
-
-    if (i)
-    {
-        for(j = i; j < 3; j++)
-            char_array_3[j] = '\0';
-
-        char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-        char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-        char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-        char_array_4[3] = char_array_3[2] & 0x3f;
-
-        for (j = 0; (j < i + 1); j++)
-            ret += base64_chars[char_array_4[j]];
-
-        while((i++ < 3))
-            ret += '=';
-
-    }
+    *f = '\0';
 
     return ret;
 
 }
 
-std::string base64_decode(std::string const& encoded_string) {
-    int in_len = encoded_string.size();
+/* */
+static char find_pos(char ch) {
+    char *ptr = (char *) strrchr(base, ch);//the last position (the only) in base[]
+    return (ptr - base);
+}
+
+/* */
+decode_result base64_decode(const char *data, int data_len) {
+    int ret_len = (data_len / 4) * 3;
+    int equal_count = 0;
+    char *ret = NULL;
+    char *f = NULL;
+    int tmp = 0;
+    int temp = 0;
+    char need[3];
+    int prepare = 0;
     int i = 0;
-    int j = 0;
-    int in_ = 0;
-    unsigned char char_array_4[4], char_array_3[3];
-    std::string ret;
-
-    while (in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
-        char_array_4[i++] = encoded_string[in_]; in_++;
-        if (i ==4) {
-            for (i = 0; i <4; i++)
-                char_array_4[i] = base64_chars.find(char_array_4[i]);
-
-            char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-            char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-            char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-            for (i = 0; (i < 3); i++)
-                ret += char_array_3[i];
-            i = 0;
+    if (*(data + data_len - 1) == '=') {
+        equal_count += 1;
+    }
+    if (*(data + data_len - 2) == '=') {
+        equal_count += 1;
+    }
+    if (*(data + data_len - 3) == '=') {//seems impossible
+        equal_count += 1;
+    }
+    switch (equal_count) {
+        case 0:
+            ret_len += 4;//3 + 1 [1 for NULL]
+            break;
+        case 1:
+            ret_len += 4;//Ceil((6*3)/8)+1
+            break;
+        case 2:
+            ret_len += 3;//Ceil((6*2)/8)+1
+            break;
+        case 3:
+            ret_len += 2;//Ceil((6*1)/8)+1
+            break;
+    }
+    ret = (char *) malloc(ret_len);
+    if (ret == NULL) {
+        printf("No enough memory.\n");
+        exit(0);
+    }
+    memset(ret, 0, ret_len);
+    f = ret;
+    while (tmp < (data_len - equal_count)) {
+        temp = 0;
+        prepare = 0;
+        memset(need, 0, 4);
+        while (temp < 4) {
+            if (tmp >= (data_len - equal_count)) {
+                break;
+            }
+            prepare = (prepare << 6) | (find_pos(data[tmp]));
+            temp++;
+            tmp++;
+        }
+        prepare = prepare << ((4 - temp) * 6);
+        for (i = 0; i < 3; i++) {
+            if (i == temp) {
+                break;
+            }
+            *f = (char) ((prepare >> ((2 - i) * 8)) & 0xFF);
+            f++;
         }
     }
+    *f = '\0';
 
-    if (i) {
-        for (j = i; j <4; j++)
-            char_array_4[j] = 0;
+    decode_result result = decode_result();
+    result.ret = ret;
+    result.ret_len = ret_len;
 
-        for (j = 0; j <4; j++)
-            char_array_4[j] = base64_chars.find(char_array_4[j]);
-
-        char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-        char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-        char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-        for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
-    }
-
-    return ret;
+    return result;
 }
