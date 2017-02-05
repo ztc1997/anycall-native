@@ -1,139 +1,148 @@
-#include <cstring>
-#include <cstdlib>
+/*
+ * Base64 encoding/decoding (RFC1341)
+ * Copyright (c) 2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ */
+
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "base64.h"
 
-const char base[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+static const unsigned char base64_table[65] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-char *base64_encode(const unsigned char *data, int data_len) {
-    //int data_len = strlen(data);
-    int prepare = 0;
-    int ret_len;
-    int temp = 0;
-    char *ret = NULL;
-    char *f = NULL;
-    int tmp = 0;
-    char changed[4];
-    int i = 0;
-    ret_len = data_len / 3;
-    temp = data_len % 3;
-    if (temp > 0) {
-        ret_len += 1;
-    }
-    ret_len = ret_len * 4 + 1;
-    ret = (char *) malloc(ret_len);
+/**
+ * base64_encode - Base64 encode
+ * @src: Data to be encoded
+ * @len: Length of the data to be encoded
+ * @out_len: Pointer to output length variable, or %NULL if not used
+ * Returns: Allocated buffer of out_len bytes of encoded data,
+ * or %NULL on failure
+ *
+ * Caller is responsible for freeing the returned buffer. Returned buffer is
+ * nul terminated to make it easier to use as a C string. The nul terminator is
+ * not included in out_len.
+ */
+unsigned char *base64_encode(const unsigned char *src, size_t len,
+                             size_t *out_len) {
+    unsigned char *out, *pos;
+    const unsigned char *end, *in;
+    size_t olen;
+    int line_len;
 
-    if (ret == NULL) {
-        printf("No enough memory.\n");
-        exit(0);
-    }
-    memset(ret, 0, ret_len);
-    f = ret;
-    while (tmp < data_len) {
-        temp = 0;
-        prepare = 0;
-        memset(changed, '\0', 4);
-        while (temp < 3) {
-            //printf("tmp = %d\n", tmp);
-            if (tmp >= data_len) {
-                break;
-            }
-            prepare = ((prepare << 8) | (data[tmp] & 0xFF));
-            tmp++;
-            temp++;
-        }
-        prepare = (prepare << ((3 - temp) * 8));
-        //printf("before for : temp = %d, prepare = %d\n", temp, prepare);
-        for (i = 0; i < 4; i++) {
-            if (temp < i) {
-                changed[i] = 0x40;
-            } else {
-                changed[i] = (prepare >> ((3 - i) * 6)) & 0x3F;
-            }
-            *f = base[changed[i]];
-            //printf("%.2X", changed[i]);
-            f++;
+    olen = len * 4 / 3 + 4; /* 3-byte blocks to 4-byte */
+    olen += olen / 72; /* line feeds */
+    olen++; /* nul termination */
+    out = (unsigned char *) malloc(olen);
+    if (out == NULL)
+        return NULL;
+
+    end = src + len;
+    in = src;
+    pos = out;
+    line_len = 0;
+    while (end - in >= 3) {
+        *pos++ = base64_table[in[0] >> 2];
+        *pos++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+        *pos++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+        *pos++ = base64_table[in[2] & 0x3f];
+        in += 3;
+        line_len += 4;
+        if (line_len >= 72) {
+            *pos++ = '\n';
+            line_len = 0;
         }
     }
-    *f = '\0';
 
-    return ret;
+    if (end - in) {
+        *pos++ = base64_table[in[0] >> 2];
+        if (end - in == 1) {
+            *pos++ = base64_table[(in[0] & 0x03) << 4];
+            *pos++ = '=';
+        } else {
+            *pos++ = base64_table[((in[0] & 0x03) << 4) |
+                                  (in[1] >> 4)];
+            *pos++ = base64_table[(in[1] & 0x0f) << 2];
+        }
+        *pos++ = '=';
+        line_len += 4;
+    }
 
+    if (line_len)
+        *pos++ = '\n';
+
+    *pos = '\0';
+    if (out_len)
+        *out_len = pos - out;
+    return out;
 }
 
-/* */
-static char find_pos(char ch) {
-    char *ptr = (char *) strrchr(base, ch);//the last position (the only) in base[]
-    return (ptr - base);
-}
 
-/* */
-decode_result base64_decode(const char *data, int data_len) {
-    int ret_len = (data_len / 4) * 3;
-    int equal_count = 0;
-    char *ret = NULL;
-    char *f = NULL;
-    int tmp = 0;
-    int temp = 0;
-    char need[3];
-    int prepare = 0;
-    int i = 0;
-    if (*(data + data_len - 1) == '=') {
-        equal_count += 1;
+/**
+ * base64_decode - Base64 decode
+ * @src: Data to be decoded
+ * @len: Length of the data to be decoded
+ * @out_len: Pointer to output length variable
+ * Returns: Allocated buffer of out_len bytes of decoded data,
+ * or %NULL on failure
+ *
+ * Caller is responsible for freeing the returned buffer.
+ */
+unsigned char *base64_decode(const unsigned char *src, size_t len,
+                             size_t *out_len) {
+    unsigned char dtable[256], *out, *pos, in[4], block[4], tmp;
+    size_t i, count, olen;
+
+    memset(dtable, 0x80, 256);
+    for (i = 0; i < sizeof(base64_table) - 1; i++)
+        dtable[base64_table[i]] = (unsigned char) i;
+    dtable['='] = 0;
+
+    count = 0;
+    for (i = 0; i < len; i++) {
+        if (dtable[src[i]] != 0x80)
+            count++;
     }
-    if (*(data + data_len - 2) == '=') {
-        equal_count += 1;
-    }
-    if (*(data + data_len - 3) == '=') {//seems impossible
-        equal_count += 1;
-    }
-    switch (equal_count) {
-        case 0:
-            ret_len += 4;//3 + 1 [1 for NULL]
-            break;
-        case 1:
-            ret_len += 4;//Ceil((6*3)/8)+1
-            break;
-        case 2:
-            ret_len += 3;//Ceil((6*2)/8)+1
-            break;
-        case 3:
-            ret_len += 2;//Ceil((6*1)/8)+1
-            break;
-    }
-    ret = (char *) malloc(ret_len);
-    if (ret == NULL) {
-        printf("No enough memory.\n");
-        exit(0);
-    }
-    memset(ret, 0, ret_len);
-    f = ret;
-    while (tmp < (data_len - equal_count)) {
-        temp = 0;
-        prepare = 0;
-        memset(need, 0, 4);
-        while (temp < 4) {
-            if (tmp >= (data_len - equal_count)) {
-                break;
-            }
-            prepare = (prepare << 6) | (find_pos(data[tmp]));
-            temp++;
-            tmp++;
-        }
-        prepare = prepare << ((4 - temp) * 6);
-        for (i = 0; i < 3; i++) {
-            if (i == temp) {
-                break;
-            }
-            *f = (char) ((prepare >> ((2 - i) * 8)) & 0xFF);
-            f++;
+
+    if (count == 0 || count % 4)
+        return NULL;
+
+    olen = count / 4 * 3;
+    pos = out = (unsigned char *) malloc(olen);
+    if (out == NULL)
+        return NULL;
+
+    count = 0;
+    for (i = 0; i < len; i++) {
+        tmp = dtable[src[i]];
+        if (tmp == 0x80)
+            continue;
+
+        in[count] = src[i];
+        block[count] = tmp;
+        count++;
+        if (count == 4) {
+            *pos++ = (block[0] << 2) | (block[1] >> 4);
+            *pos++ = (block[1] << 4) | (block[2] >> 2);
+            *pos++ = (block[2] << 6) | block[3];
+            count = 0;
         }
     }
-    *f = '\0';
 
-    decode_result result = decode_result();
-    result.ret = ret;
-    result.ret_len = ret_len;
+    if (pos > out) {
+        if (in[2] == '=')
+            pos -= 2;
+        else if (in[3] == '=')
+            pos--;
+    }
 
-    return result;
+    *out_len = pos - out;
+    return out;
 }

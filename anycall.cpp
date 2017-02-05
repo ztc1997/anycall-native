@@ -30,21 +30,23 @@
 
 using namespace android;
 
-char *callMethod(sp<IBinder> binder, int code, char *encodedDate)
+unsigned char *callMethod(sp<IBinder> binder, int code, char *encodedDate)
 {
-    decode_result result = base64_decode(encodedDate, strlen(encodedDate));
+    size_t size;
+    unsigned char *result = base64_decode(reinterpret_cast<const unsigned char *>(encodedDate),
+                                          strlen(encodedDate), &size);
 
     Parcel data, reply;
 
-    data.setDataSize(result.ret_len);
+    data.setDataSize(size);
     data.setDataPosition(0);
 
-    void *raw = data.writeInplace(result.ret_len);
-    memmove(raw, result.ret, result.ret_len); 
+    void *raw = data.writeInplace(size);
+    memmove(raw, result, size);
 
     status_t st = binder->remoteBinder()->transact(code, data, &reply);
 
-    char *output = base64_encode(reply.data(), reply.dataSize());
+    unsigned char *output = base64_encode(reply.data(), reply.dataSize(), &size);
 
     return output;
 }
@@ -77,7 +79,7 @@ int main(int argc, char **argv)
         int code = atoi(argv[2]);
         char *encodedDate = argv[3];
 
-        char *output = callMethod(binder, code, encodedDate);
+        unsigned char *output = callMethod(binder, code, encodedDate);
         printf("%s\n", output);
 
         return 0;
@@ -94,7 +96,7 @@ int main(int argc, char **argv)
         int code = atoi(strtok(input, " "));
         char *encodedDate = strtok(NULL, "\n");
 
-        char *output = callMethod(binder, code, encodedDate);
+        unsigned char *output = callMethod(binder, code, encodedDate);
         printf("%s\n", output);
     }
 
